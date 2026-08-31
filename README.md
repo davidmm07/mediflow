@@ -229,6 +229,20 @@ minutes while Keycloak imports the realm.
 Seeded realm users: `dr.house` / `doctor123` (doctor), `ana.paciente` /
 `patient123` (patient), `admin.ops` / `admin123` (admin).
 
+> **Every credential in this repository is a throwaway local-development
+> value** — the Keycloak admin password, the `mediflow-auth-service` client
+> secret, the Pact Broker login and the seeded users' passwords. They exist so
+> `make up` gives you a working stack in one command, and they are committed
+> deliberately for that reason. Nothing here is, or has ever been, a real
+> secret.
+>
+> The realm export is likewise development-shaped: `sslRequired: none`, a
+> public client with the direct-access grant enabled so the smoke test can
+> fetch tokens, and wildcard web origins. Deploying it unchanged would be a
+> security hole: real deployments need rotated secrets, TLS enforced,
+> Authorization Code + PKCE instead of the password grant, and the seeded
+> users deleted.
+
 ### End-to-end smoke test
 
 ```bash

@@ -5,6 +5,14 @@ on:
     branches: [main]
   pull_request:
 
+# Once the repository is public, anyone can open a pull request from a fork
+# and run this workflow. Read-only by default means a malicious PR cannot use
+# the automatic token to write to the repository; the publish job below is
+# additionally gated on the branch, so a fork can never reach the broker
+# credentials either.
+permissions:
+  contents: read
+
 env:
   GO_VERSION: "1.25"
 

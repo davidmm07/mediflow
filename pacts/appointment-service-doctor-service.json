@@ -1,0 +1,272 @@
+{
+  "consumer": {
+    "name": "appointment-service"
+  },
+  "interactions": [
+    {
+      "description": "a request for a doctor that does not exist",
+      "providerState": "no doctor with ID 00000000-0000-4000-8000-000000000000 exists",
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer an-access-token-issued-by-keycloak"
+        },
+        "matchingRules": {
+          "$.headers.Authorization": {
+            "match": "regex",
+            "regex": "^Bearer .+$"
+          }
+        },
+        "method": "GET",
+        "path": "/doctors/00000000-0000-4000-8000-000000000000"
+      },
+      "response": {
+        "body": {
+          "error": "doctor not found"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.error": {
+            "match": "type"
+          }
+        },
+        "status": 404
+      }
+    },
+    {
+      "description": "a request for that doctor's available slots",
+      "providerState": "doctor 3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21 has at least one free slot in September 2026",
+      "request": {
+        "headers": {
+          "Authorization": "Bearer an-access-token-issued-by-keycloak"
+        },
+        "matchingRules": {
+          "$.headers.Authorization": {
+            "match": "regex",
+            "regex": "^Bearer .+$"
+          }
+        },
+        "method": "GET",
+        "path": "/doctors/3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21/slots",
+        "query": "available=true&from=2026-09-01T00%3a00%3a00Z&to=2026-09-30T00%3a00%3a00Z"
+      },
+      "response": {
+        "body": {
+          "doctor_id": "3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21",
+          "slots": [
+            {
+              "doctor_id": "3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21",
+              "ends_at": "2026-09-14T09:30:00Z",
+              "id": "b2c4d6e8-1357-4900-a1b2-c3d4e5f60718",
+              "reserved": false,
+              "starts_at": "2026-09-14T09:00:00Z"
+            }
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.slots": {
+            "match": "type",
+            "min": 1
+          },
+          "$.body.slots[*].ends_at": {
+            "match": "regex",
+            "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "$.body.slots[*].id": {
+            "match": "type"
+          },
+          "$.body.slots[*].reserved": {
+            "match": "type"
+          },
+          "$.body.slots[*].starts_at": {
+            "match": "regex",
+            "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request for that doctor's profile",
+      "providerState": "a doctor with ID 3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21 exists",
+      "request": {
+        "headers": {
+          "Accept": "application/json",
+          "Authorization": "Bearer an-access-token-issued-by-keycloak"
+        },
+        "matchingRules": {
+          "$.headers.Authorization": {
+            "match": "regex",
+            "regex": "^Bearer .+$"
+          }
+        },
+        "method": "GET",
+        "path": "/doctors/3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21"
+      },
+      "response": {
+        "body": {
+          "active": true,
+          "consultation_fee": 75,
+          "full_name": "Gregory House",
+          "id": "3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21",
+          "specialty": "cardiology"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.active": {
+            "match": "type"
+          },
+          "$.body.consultation_fee": {
+            "match": "type"
+          },
+          "$.body.full_name": {
+            "match": "type"
+          },
+          "$.body.specialty": {
+            "match": "type"
+          },
+          "$.headers['Content-Type']": {
+            "match": "regex",
+            "regex": "application/json.*"
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "a request to release that slot after a cancellation",
+      "providerState": "slot d4e6f801-2468-4a13-b5c6-d7e8f9001122 of doctor 3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21 is already reserved",
+      "request": {
+        "headers": {
+          "Authorization": "Bearer an-access-token-issued-by-keycloak"
+        },
+        "matchingRules": {
+          "$.headers.Authorization": {
+            "match": "regex",
+            "regex": "^Bearer .+$"
+          }
+        },
+        "method": "POST",
+        "path": "/doctors/3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21/slots/d4e6f801-2468-4a13-b5c6-d7e8f9001122/release"
+      },
+      "response": {
+        "status": 204
+      }
+    },
+    {
+      "description": "a request to reserve a slot that another patient already took",
+      "providerState": "slot d4e6f801-2468-4a13-b5c6-d7e8f9001122 of doctor 3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21 is already reserved",
+      "request": {
+        "body": {
+          "appointment_id": "9a8b7c6d-5e4f-4a3b-8c9d-0e1f2a3b4c5d"
+        },
+        "headers": {
+          "Authorization": "Bearer an-access-token-issued-by-keycloak",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.appointment_id": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "regex",
+            "regex": "^Bearer .+$"
+          }
+        },
+        "method": "POST",
+        "path": "/doctors/3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21/slots/d4e6f801-2468-4a13-b5c6-d7e8f9001122/reserve"
+      },
+      "response": {
+        "body": {
+          "error": "availability slot is already reserved"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.error": {
+            "match": "type"
+          }
+        },
+        "status": 409
+      }
+    },
+    {
+      "description": "a request to reserve that slot",
+      "providerState": "slot b2c4d6e8-1357-4900-a1b2-c3d4e5f60718 of doctor 3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21 is free",
+      "request": {
+        "body": {
+          "appointment_id": "9a8b7c6d-5e4f-4a3b-8c9d-0e1f2a3b4c5d"
+        },
+        "headers": {
+          "Authorization": "Bearer an-access-token-issued-by-keycloak",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.appointment_id": {
+            "match": "type"
+          },
+          "$.headers.Authorization": {
+            "match": "regex",
+            "regex": "^Bearer .+$"
+          }
+        },
+        "method": "POST",
+        "path": "/doctors/3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21/slots/b2c4d6e8-1357-4900-a1b2-c3d4e5f60718/reserve"
+      },
+      "response": {
+        "body": {
+          "appointment_id": "9a8b7c6d-5e4f-4a3b-8c9d-0e1f2a3b4c5d",
+          "doctor_id": "3f1a9b7c-2d54-4a1e-9f3b-8c0d5e6a7b21",
+          "ends_at": "2026-09-14T09:30:00Z",
+          "id": "b2c4d6e8-1357-4900-a1b2-c3d4e5f60718",
+          "reserved": true,
+          "starts_at": "2026-09-14T09:00:00Z"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "$.body.appointment_id": {
+            "match": "type"
+          },
+          "$.body.ends_at": {
+            "match": "regex",
+            "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$"
+          },
+          "$.body.reserved": {
+            "match": "type"
+          },
+          "$.body.starts_at": {
+            "match": "regex",
+            "regex": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$"
+          }
+        },
+        "status": 200
+      }
+    }
+  ],
+  "metadata": {
+    "pact-go": {
+      "version": "dev"
+    },
+    "pactRust": {
+      "ffi": "0.5.6",
+      "mockserver": "2.2.5",
+      "models": "1.3.14"
+    },
+    "pactSpecification": {
+      "version": "2.0.0"
+    }
+  },
+  "provider": {
+    "name": "doctor-service"
+  }
+}

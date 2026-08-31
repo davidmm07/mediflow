@@ -1,6 +1,6 @@
 // Package api is doctor-service's HTTP surface. Two audiences use it: humans
 // browsing the practitioner directory through the gateway, and
-// appointment-service calling the slot reservation endpoints synchronously —
+// appointment-service calling the slot reservation endpoints synchronously,
 // which is exactly the interaction covered by the Pact contract.
 package api
 

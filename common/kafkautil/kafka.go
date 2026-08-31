@@ -18,10 +18,10 @@ import (
 // Keeping it uniform is what lets a single message-pact schema cover every
 // topic.
 type Envelope struct {
-	Event     string          `json:"event"`
-	Version   int             `json:"version"`
-	OccurredAt time.Time      `json:"occurred_at"`
-	Data      json.RawMessage `json:"data"`
+	Event      string          `json:"event"`
+	Version    int             `json:"version"`
+	OccurredAt time.Time       `json:"occurred_at"`
+	Data       json.RawMessage `json:"data"`
 }
 
 // Producer publishes envelopes to a single Kafka topic.

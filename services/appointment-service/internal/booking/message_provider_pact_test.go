@@ -4,7 +4,7 @@
 // the events notification-service says it depends on.
 //
 // The message handlers below do not hand-write JSON. They drive the actual
-// booking.Service — with a stubbed doctor API and an in-memory store — and
+// booking.Service, with a stubbed doctor API and an in-memory store, and
 // return whatever payload the service genuinely published to Kafka. That is
 // what makes the verification meaningful: if Book() stops setting
 // DoctorName, no fixture hides it, and the pact fails here.

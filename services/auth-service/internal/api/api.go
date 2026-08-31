@@ -130,7 +130,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Registration already succeeded in Keycloak, so a broker hiccup must not
-	// fail the request — downstream provisioning is eventually consistent.
+	// fail the request. Downstream provisioning is eventually consistent.
 	if err := h.Publisher.Publish(r.Context(), "auth.user.registered", 1, userID, UserRegisteredEvent{
 		UserID:    userID,
 		Username:  req.Username,

@@ -1,6 +1,6 @@
 // Package events reacts to identity changes broadcast by auth-service.
-// Provisioning a patient record here — rather than having auth-service write
-// into another service's database — is what keeps the two services
+// Provisioning a patient record here, rather than having auth-service write
+// into another service's database, is what keeps the two services
 // independently deployable.
 package events
 

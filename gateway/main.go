@@ -23,8 +23,8 @@ func main() {
 	}
 
 	routes := []proxy.Route{
-		// Registration must be reachable without a token — it is how a user
-		// obtains one in the first place.
+		// Registration must be reachable without a token, since it is how a
+		// user obtains one in the first place.
 		{Prefix: "/auth", Upstream: config.MustGet("AUTH_SERVICE_URL"), Public: true},
 		{Prefix: "/doctors", Upstream: config.MustGet("DOCTOR_SERVICE_URL")},
 		{Prefix: "/patients", Upstream: config.MustGet("PATIENT_SERVICE_URL")},

@@ -27,12 +27,27 @@ build: ## Compile every module
 vet: ## go vet every module
 	@for m in $(MODULES); do (cd $$m && go vet ./...) || exit 1; done
 
+# go vet does not check formatting, so a misaligned struct literal can sit in
+# the tree indefinitely. This fails instead of rewriting, so CI reports the
+# problem rather than silently producing a diff nobody sees.
+.PHONY: fmt-check
+fmt-check: ## Fail if any file is not gofmt-formatted
+	@unformatted=$$(gofmt -l $(MODULES)); \
+	if [ -n "$$unformatted" ]; then \
+	  echo "not gofmt-formatted:"; echo "$$unformatted"; \
+	  echo "run 'make fmt' to fix"; exit 1; \
+	fi
+
+.PHONY: fmt
+fmt: ## Format every module with gofmt
+	gofmt -w $(MODULES)
+
 .PHONY: test
 test: ## Run unit tests (no Pact FFI needed)
 	@for m in $(MODULES); do (cd $$m && go test ./...) || exit 1; done
 
 .PHONY: check
-check: vet test ## vet + unit tests
+check: fmt-check vet test ## gofmt + vet + unit tests
 
 # --------------------------------------------------------------------- pact
 # The Pact suites are behind the `pact` build tag because they need the

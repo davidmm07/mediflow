@@ -9,11 +9,11 @@ import (
 
 // Errors surfaced by the store and service layers.
 var (
-	ErrNotFound       = errors.New("appointment not found")
+	ErrNotFound        = errors.New("appointment not found")
 	ErrSlotUnavailable = errors.New("the requested slot is no longer available")
-	ErrDoctorNotFound = errors.New("doctor not found")
-	ErrNotCancellable = errors.New("appointment cannot be cancelled in its current state")
-	ErrForbidden      = errors.New("appointment does not belong to this user")
+	ErrDoctorNotFound  = errors.New("doctor not found")
+	ErrNotCancellable  = errors.New("appointment cannot be cancelled in its current state")
+	ErrForbidden       = errors.New("appointment does not belong to this user")
 )
 
 // Status is the lifecycle state of an appointment.

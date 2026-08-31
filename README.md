@@ -1,4 +1,4 @@
-# MediFlow — Telemedicine platform on Go microservices
+# MediFlow: Telemedicine platform on Go microservices
 
 [![CI](https://github.com/davidmm07/mediflow/actions/workflows/ci.yml/badge.svg)](https://github.com/davidmm07/mediflow/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
@@ -77,14 +77,14 @@ Patient cancels ─▶ appointment-service ──HTTP──▶ doctor-service (r
 ```
 
 Every service verifies the Keycloak JWT itself against the realm's JWKS. The
-gateway is a first filter and a convenience, never the only gate — a service
+gateway is a first filter and a convenience, never the only gate. A service
 reached directly is still protected.
 
 ### Services
 
 | Service | Responsibility | Storage | Integration role |
 |---|---|---|---|
-| `gateway` | Single public entry point, edge JWT validation, path routing | — | — |
+| `gateway` | Single public entry point, edge JWT validation, path routing | none | none |
 | `auth-service` | Self-registration via the Keycloak Admin API, token introspection | Keycloak | Kafka **producer** |
 | `doctor-service` | Practitioner directory, availability, slot reservation | MongoDB | Pact **provider** (HTTP) |
 | `patient-service` | Patient profiles, provisioned reactively from identity events | MongoDB | Kafka **consumer** |
@@ -95,7 +95,7 @@ reached directly is still protected.
 
 ## The differentiator: contract testing with Pact
 
-Integration tests that boot the whole stack are slow, flaky, and — worse — they
+Integration tests that boot the whole stack are slow and flaky. Worse, they
 tell you a pair of services worked *together at one moment*, not that either one
 is safe to deploy alone. Contract tests invert that: each side is verified
 independently against a shared, versioned agreement.
@@ -104,7 +104,7 @@ MediFlow covers **both** kinds of boundary. The message half is the one usually
 skipped, and it is the one that matters most on an event bus: a broker will
 happily deliver a payload whose shape nobody agreed on.
 
-### 1. HTTP contract — `appointment-service` → `doctor-service`
+### 1. HTTP contract: `appointment-service` → `doctor-service`
 
 **Consumer side** ([`client_pact_test.go`](services/appointment-service/internal/doctorclient/client_pact_test.go))
 does not describe requests in prose. It runs the *real* `doctorclient` code
@@ -128,7 +128,7 @@ Interactions covered: fetching a profile, the 404, listing available slots,
 reserving, **losing the reservation race (409)**, and releasing after a
 cancellation.
 
-### 2. Message contracts — Kafka events
+### 2. Message contracts: Kafka events
 
 `notification-service` declares what it reads from each event
 ([`events_pact_test.go`](services/notification-service/internal/events/events_pact_test.go)).
@@ -143,7 +143,7 @@ drives its real registration handler.
 
 ### Does it actually catch anything?
 
-Renaming one JSON tag in the producer — `doctor_name` → `physician_name` —
+Renaming one JSON tag in the producer (`doctor_name` to `physician_name`)
 fails verification with an exact diff:
 
 ```
@@ -175,7 +175,7 @@ without running anything:
 
 **Ordering in the booking saga is deliberate, and different in each direction.**
 `Book` reserves the slot in doctor-service *before* writing locally, because the
-reservation is the contended resource — reserving first means a losing racer
+reservation is the contended resource. Reserving first means a losing racer
 never creates an orphan appointment. If the local write then fails, the
 reservation is released as a compensating action
 ([`booking.go`](services/appointment-service/internal/booking/booking.go)).
@@ -195,15 +195,15 @@ the second line of defence.
 
 **Patients address `/patients/me`, never `/patients/{id}`.** Identity comes from
 the token, so there is no id to guess. Where an id is unavoidable
-(`GET /appointments/{id}`), a non-owner gets **404 rather than 403** — a 403
-would confirm the appointment exists.
+(`GET /appointments/{id}`), a non-owner gets **404 rather than 403**, because a
+403 would confirm the appointment exists.
 
 **Consumers declare only the fields they read.** `notification-service`'s event
 structs are subsets, so a producer adding a field is not a breaking change.
 That is a property the contract encodes, not a convention people remember.
 
 **Database per service, no shared schema.** `patient-service` is provisioned by
-an event rather than by `auth-service` writing into its database — that is what
+an event rather than by `auth-service` writing into its database. That is what
 keeps the two independently deployable.
 
 ---
@@ -222,7 +222,7 @@ minutes while Keycloak imports the realm.
 
 | Endpoint | URL | Credentials |
 |---|---|---|
-| API gateway | http://localhost:8080 | — |
+| API gateway | http://localhost:8080 | none |
 | Keycloak admin | http://localhost:8081 | `admin` / `admin` |
 | Pact Broker | http://localhost:9292 | `pact` / `pact` |
 
@@ -230,7 +230,7 @@ Seeded realm users: `dr.house` / `doctor123` (doctor), `ana.paciente` /
 `patient123` (patient), `admin.ops` / `admin123` (admin).
 
 > **Every credential in this repository is a throwaway local-development
-> value** — the Keycloak admin password, the `mediflow-auth-service` client
+> value**: the Keycloak admin password, the `mediflow-auth-service` client
 > secret, the Pact Broker login and the seeded users' passwords. They exist so
 > `make up` gives you a working stack in one command, and they are committed
 > deliberately for that reason. Nothing here is, or has ever been, a real
@@ -276,7 +276,7 @@ make check
 ```
 
 Vet plus unit tests across all seven modules. No native dependencies, no
-containers — fast enough to run on every save.
+containers, and fast enough to run on every save.
 
 ```bash
 make pact-install   # one-off: downloads the Pact FFI library
@@ -298,13 +298,13 @@ event, and malformed payloads being dropped rather than retried forever.
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs four stages:
 
-1. **unit** — vet and unit-test every module.
-2. **contracts** — install the Pact FFI, generate the consumer contracts, then
+1. **unit**: vet and unit-test every module.
+2. **contracts**: install the Pact FFI, generate the consumer contracts, then
    verify every provider against them. This is the gate that stops a service
    shipping a change its collaborators cannot handle.
-3. **publish-pacts** — trunk only, and only after verification is green; the
+3. **publish-pacts**: trunk only, and only after verification is green; the
    broker should never hold a contract that failed.
-4. **images** — build all six container images, catching Dockerfile drift.
+4. **images**: build all six container images, catching Dockerfile drift.
 
 `make can-i-deploy` queries the broker for whether a given version is safe to
 release against everything already deployed.

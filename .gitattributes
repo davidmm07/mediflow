@@ -1,0 +1,8 @@
+# Normalise to LF in the repository. Without this, a checkout on Windows
+# gives scripts/smoke-test.sh CRLF endings and it fails to run under
+# Linux/Docker with a confusing "bad interpreter" error.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.gz  binary

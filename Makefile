@@ -38,9 +38,15 @@ check: vet test ## vet + unit tests
 # The Pact suites are behind the `pact` build tag because they need the
 # native FFI library; `make test` stays installable-free and fast.
 
+# The library must land in /tmp, /opt/pact/lib or /usr/local/lib — those are
+# the only paths pact-go's cgo directive searches at link time, and anywhere
+# else fails with "cannot find -lpact_ffi". LD_LIBRARY_PATH does not help:
+# it affects loading at runtime, not linking. The installer defaults to
+# /usr/local/lib, so run this with sudo if that is not writable by your user.
 .PHONY: pact-install
-pact-install: ## Download the Pact FFI native library
-	go run github.com/pact-foundation/pact-go/v2 install
+pact-install: ## Download the Pact FFI native library into /usr/local/lib
+	cd services/appointment-service && \
+	  go run github.com/pact-foundation/pact-go/v2 install
 
 .PHONY: pact-consumer
 pact-consumer: ## Run consumer-side tests; regenerates ./pacts

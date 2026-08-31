@@ -1,0 +1,263 @@
+name: mediflow
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  environment: &common-env
+    MEDIFLOW_ENV: local
+    LOG_LEVEL: debug
+    KEYCLOAK_ISSUER: http://keycloak:8080/realms/mediflow
+    KAFKA_BROKERS: redpanda:9092
+
+services:
+  # ---------------------------------------------------------------- identity
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./deploy/keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      # The Keycloak image ships no curl or wget, so the probe uses bash's
+      # /dev/tcp and asks for the realm the services actually need — a
+      # started server with a failed realm import is not "healthy" here.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080 &&
+          printf 'GET /realms/mediflow HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '200 OK' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 45s
+
+  # ------------------------------------------------------------------ broker
+  redpanda:
+    image: redpandadata/redpanda:v24.1.9
+    command:
+      - redpanda start
+      - --smp 1
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr PLAINTEXT://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:9092,EXTERNAL://localhost:19092
+      - --mode dev-container
+    ports:
+      - "19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redpanda-init:
+    image: redpandadata/redpanda:v24.1.9
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    # Topics are created up front so a consumer starting before its first
+    # producer doesn't sit in a retry loop against a missing topic.
+    entrypoint:
+      - /bin/bash
+      - -c
+      - >-
+        rpk topic create auth.user.registered appointments.created appointments.cancelled
+        --brokers redpanda:9092 --partitions 3 --replicas 1 || true
+    restart: "no"
+
+  # --------------------------------------------------------------- databases
+  mongo-doctor:
+    image: mongo:7
+    volumes: ["mongo-doctor-data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo-patient:
+    image: mongo:7
+    volumes: ["mongo-patient-data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo-appointment:
+    image: mongo:7
+    volumes: ["mongo-appointment-data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mongo-notification:
+    image: mongo:7
+    volumes: ["mongo-notification-data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------- pact ecosystem
+  pact-broker-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pactbroker
+      POSTGRES_PASSWORD: pactbroker
+      POSTGRES_DB: pactbroker
+    volumes: ["pact-broker-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pactbroker"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  pact-broker:
+    image: pactfoundation/pact-broker:2.107.1.1
+    depends_on:
+      pact-broker-db:
+        condition: service_healthy
+    ports:
+      - "9292:9292"
+    environment:
+      PACT_BROKER_DATABASE_ADAPTER: postgres
+      PACT_BROKER_DATABASE_HOST: pact-broker-db
+      PACT_BROKER_DATABASE_NAME: pactbroker
+      PACT_BROKER_DATABASE_USERNAME: pactbroker
+      PACT_BROKER_DATABASE_PASSWORD: pactbroker
+      PACT_BROKER_BASIC_AUTH_USERNAME: pact
+      PACT_BROKER_BASIC_AUTH_PASSWORD: pact
+      PACT_BROKER_ALLOW_PUBLIC_READ: "true"
+
+  # ------------------------------------------------------------- application
+  gateway:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: gateway }
+    ports:
+      - "8080:8080"
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      AUTH_SERVICE_URL: http://auth-service:8080
+      DOCTOR_SERVICE_URL: http://doctor-service:8080
+      PATIENT_SERVICE_URL: http://patient-service:8080
+      APPOINTMENT_SERVICE_URL: http://appointment-service:8080
+      NOTIFICATION_SERVICE_URL: http://notification-service:8080
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
+  auth-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: services/auth-service }
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: mediflow
+      KEYCLOAK_ADMIN_CLIENT_ID: mediflow-auth-service
+      KEYCLOAK_ADMIN_CLIENT_SECRET: auth-service-secret
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  doctor-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: services/doctor-service }
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      MONGO_URI: mongodb://mongo-doctor:27017
+      MONGO_DB: doctors
+    depends_on:
+      mongo-doctor:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+
+  patient-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: services/patient-service }
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      MONGO_URI: mongodb://mongo-patient:27017
+      MONGO_DB: patients
+    depends_on:
+      mongo-patient:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  appointment-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: services/appointment-service }
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      MONGO_URI: mongodb://mongo-appointment:27017
+      MONGO_DB: appointments
+      DOCTOR_SERVICE_URL: http://doctor-service:8080
+    depends_on:
+      mongo-appointment:
+        condition: service_healthy
+      doctor-service:
+        condition: service_started
+      keycloak:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+  notification-service:
+    <<: *service-defaults
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      args: { SERVICE: services/notification-service }
+    environment:
+      <<: *common-env
+      PORT: "8080"
+      MONGO_URI: mongodb://mongo-notification:27017
+      MONGO_DB: notifications
+    depends_on:
+      mongo-notification:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+
+volumes:
+  mongo-doctor-data:
+  mongo-patient-data:
+  mongo-appointment-data:
+  mongo-notification-data:
+  pact-broker-data:

@@ -1,0 +1,101 @@
+{
+  "consumer": {
+    "name": "notification-service"
+  },
+  "interactions": [
+    {
+      "contents": {
+        "content": {
+          "email": "ana@mediflow.dev",
+          "first_name": "Ana",
+          "last_name": "Ramirez",
+          "role": "patient",
+          "user_id": "11111111-2222-4333-8444-555555555555",
+          "username": "ana.paciente"
+        },
+        "contentType": "application/json",
+        "encoded": false
+      },
+      "description": "an auth.user.registered event",
+      "matchingRules": {
+        "body": {
+          "$.email": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "^[^@\\s]+@[^@\\s]+\\.[a-z]{2,}$"
+              }
+            ]
+          },
+          "$.first_name": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          },
+          "$.last_name": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          },
+          "$.role": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "regex",
+                "regex": "^(patient|doctor)$"
+              }
+            ]
+          },
+          "$.user_id": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          },
+          "$.username": {
+            "combine": "AND",
+            "matchers": [
+              {
+                "match": "type"
+              }
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "contentType": "application/json"
+      },
+      "pending": false,
+      "providerStates": [
+        {
+          "name": "a new patient has just completed self-registration"
+        }
+      ],
+      "type": "Asynchronous/Messages"
+    }
+  ],
+  "metadata": {
+    "pact-go": {
+      "version": "dev"
+    },
+    "pactRust": {
+      "ffi": "0.5.6",
+      "models": "1.3.14"
+    },
+    "pactSpecification": {
+      "version": "4.0"
+    }
+  },
+  "provider": {
+    "name": "auth-service"
+  }
+}

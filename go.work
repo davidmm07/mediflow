@@ -1,0 +1,11 @@
+go 1.25.0
+
+use (
+	./common
+	./gateway
+	./services/auth-service
+	./services/doctor-service
+	./services/patient-service
+	./services/appointment-service
+	./services/notification-service
+)

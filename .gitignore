@@ -1,0 +1,22 @@
+# Build output
+bin/
+dist/
+*.exe
+
+# Go workspace sum file is machine-local
+go.work.sum
+
+# Pact FFI library, downloaded by `make pact-install`
+/pact/
+libpact_ffi.*
+pact_ffi.*
+
+# Pact logs
+pact.log
+*.log
+
+# Editors
+.idea/
+.vscode/
+*.swp
+.DS_Store

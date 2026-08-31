@@ -1,0 +1,90 @@
+{
+  "realm": "mediflow",
+  "enabled": true,
+  "displayName": "MediFlow Telehealth",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "roles": {
+    "realm": [
+      { "name": "patient", "description": "Can manage their own profile and book appointments" },
+      { "name": "doctor", "description": "Can manage their profile, availability and see their agenda" },
+      { "name": "admin", "description": "Back-office operator with full access" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "mediflow-gateway",
+      "name": "MediFlow Public Gateway",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:8080/*", "http://localhost:3000/*"],
+      "webOrigins": ["*"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "audience-mediflow",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "mediflow-gateway",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "mediflow-auth-service",
+      "name": "MediFlow Auth Service (confidential)",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "auth-service-secret",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "serviceAccountsRealmRoles": ["admin"]
+    }
+  ],
+  "users": [
+    {
+      "username": "dr.house",
+      "email": "house@mediflow.dev",
+      "firstName": "Gregory",
+      "lastName": "House",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "doctor123", "temporary": false }],
+      "realmRoles": ["doctor"]
+    },
+    {
+      "username": "ana.paciente",
+      "email": "ana@mediflow.dev",
+      "firstName": "Ana",
+      "lastName": "Ramirez",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "patient123", "temporary": false }],
+      "realmRoles": ["patient"]
+    },
+    {
+      "username": "admin.ops",
+      "email": "ops@mediflow.dev",
+      "firstName": "Ops",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "admin123", "temporary": false }],
+      "realmRoles": ["admin"]
+    }
+  ],
+  "clientScopeMappings": {},
+  "defaultDefaultClientScopes": ["profile", "email", "roles", "web-origins"]
+}

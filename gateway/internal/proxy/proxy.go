@@ -36,8 +36,8 @@ type Gateway struct {
 }
 
 // New builds a Gateway for the given routes, failing if any upstream URL is
-// unparseable — a typo in configuration should stop the process at boot, not
-// produce 502s later.
+// unparseable. A typo in configuration should stop the process at boot rather
+// than produce 502s later.
 func New(verifier *authmw.Verifier, log zerolog.Logger, routes []Route) (*Gateway, error) {
 	g := &Gateway{
 		verifier: verifier,

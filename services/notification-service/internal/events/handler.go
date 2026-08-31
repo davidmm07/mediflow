@@ -107,11 +107,11 @@ func (n *Notifier) handleAppointmentCreated(ctx context.Context, raw json.RawMes
 	}
 
 	notification := domain.Notification{
-		ID:       uuid.NewString(),
-		UserID:   payload.PatientUserID,
-		Kind:     domain.KindAppointmentConfirmed,
-		Channel:  domain.ChannelInApp,
-		Title:    "Your appointment is confirmed",
+		ID:      uuid.NewString(),
+		UserID:  payload.PatientUserID,
+		Kind:    domain.KindAppointmentConfirmed,
+		Channel: domain.ChannelInApp,
+		Title:   "Your appointment is confirmed",
 		Body: fmt.Sprintf("Your %s consultation with %s is confirmed for %s.",
 			payload.Specialty, payload.DoctorName, domain.AppointmentTime(payload.StartsAt)),
 		SourceID:  payload.AppointmentID,

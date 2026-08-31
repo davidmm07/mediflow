@@ -1,6 +1,6 @@
 // Package booking orchestrates MediFlow's central use case. It is the only
-// place in the system that touches three collaborators in one operation —
-// doctor-service over HTTP, MongoDB, and Kafka — so it is also where the
+// place in the system that touches three collaborators in one operation
+// (doctor-service over HTTP, MongoDB, and Kafka), so it is also where the
 // failure ordering matters most and where the compensating action lives.
 package booking
 
@@ -93,7 +93,7 @@ func (s *Service) now() time.Time {
 //
 // Ordering is deliberate: the slot is reserved in doctor-service *before*
 // the appointment row is written, because the reservation is the contended
-// resource — reserving first means a losing racer never creates an orphan
+// resource. Reserving first means a losing racer never creates an orphan
 // appointment. If the local write then fails, the reservation is released so
 // the slot doesn't leak.
 func (s *Service) Book(ctx context.Context, req BookRequest) (domain.Appointment, error) {

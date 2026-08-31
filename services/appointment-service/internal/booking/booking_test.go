@@ -21,13 +21,13 @@ var (
 )
 
 type fakeDoctorAPI struct {
-	doctor         doctorclient.Doctor
-	slot           doctorclient.Slot
-	getErr         error
-	reserveErr     error
-	releaseErr     error
-	releasedSlots  []string
-	reserveCalls   int
+	doctor        doctorclient.Doctor
+	slot          doctorclient.Slot
+	getErr        error
+	reserveErr    error
+	releaseErr    error
+	releasedSlots []string
+	reserveCalls  int
 }
 
 func (f *fakeDoctorAPI) GetDoctor(_ context.Context, _, _ string) (doctorclient.Doctor, error) {

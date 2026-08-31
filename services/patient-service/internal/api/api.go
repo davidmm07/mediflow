@@ -1,5 +1,5 @@
 // Package api exposes patient-service's HTTP endpoints. Patients only ever
-// address their own record ("/patients/me") — the identity comes from the
+// address their own record ("/patients/me"). The identity comes from the
 // token, never from a path parameter, so one patient can't read another's
 // profile by guessing an id.
 package api

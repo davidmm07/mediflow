@@ -12,7 +12,7 @@
 //
 // The consequence is concrete: if appointment-service renames `starts_at` or
 // drops `doctor_name`, this test still passes locally (the producer isn't
-// here) — but the pact published from it fails when appointment-service
+// here), but the pact published from it fails when appointment-service
 // verifies it, in the producer's own pipeline, before the change ships.
 package events_test
 
@@ -28,8 +28,8 @@ import (
 	"github.com/davidmm07/mediflow/services/notification-service/internal/domain"
 	"github.com/davidmm07/mediflow/services/notification-service/internal/events"
 	"github.com/davidmm07/mediflow/services/notification-service/internal/store"
-	message "github.com/pact-foundation/pact-go/v2/message/v4"
 	"github.com/pact-foundation/pact-go/v2/matchers"
+	message "github.com/pact-foundation/pact-go/v2/message/v4"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 )

@@ -4,7 +4,7 @@
 // doctor-service (provider).
 //
 // The point of this file is that the expectations below are exercised by the
-// *real* doctorclient code — the Pact mock provider answers, the client
+// *real* doctorclient code: the Pact mock provider answers, the client
 // parses, and the assertions run on the parsed result. A pact generated this
 // way cannot drift from the client: if someone changes a URL, a header or a
 // field name in client.go, this test fails before the contract is published.
@@ -63,7 +63,7 @@ func TestPactGetDoctor(t *testing.T) {
 
 	err := mockProvider.
 		AddInteraction().
-		Given("a doctor with ID " + doctorID + " exists").
+		Given("a doctor with ID "+doctorID+" exists").
 		UponReceiving("a request for that doctor's profile").
 		WithRequest("GET", "/doctors/"+doctorID, func(b *consumer.V2RequestBuilder) {
 			b.Header("Authorization", matchers.Regex("Bearer "+bearerToken, "^Bearer .+$"))
@@ -97,7 +97,7 @@ func TestPactGetDoctorNotFound(t *testing.T) {
 
 	err := mockProvider.
 		AddInteraction().
-		Given("no doctor with ID " + missingID + " exists").
+		Given("no doctor with ID "+missingID+" exists").
 		UponReceiving("a request for a doctor that does not exist").
 		WithRequest("GET", "/doctors/"+missingID, func(b *consumer.V2RequestBuilder) {
 			b.Header("Authorization", matchers.Regex("Bearer "+bearerToken, "^Bearer .+$"))
@@ -123,7 +123,7 @@ func TestPactListAvailableSlots(t *testing.T) {
 
 	err := mockProvider.
 		AddInteraction().
-		Given("doctor " + doctorID + " has at least one free slot in September 2026").
+		Given("doctor "+doctorID+" has at least one free slot in September 2026").
 		UponReceiving("a request for that doctor's available slots").
 		WithRequest("GET", "/doctors/"+doctorID+"/slots", func(b *consumer.V2RequestBuilder) {
 			b.Query("available", matchers.S("true"))
@@ -135,8 +135,8 @@ func TestPactListAvailableSlots(t *testing.T) {
 			b.JSONBody(matchers.Map{
 				"doctor_id": matchers.S(doctorID),
 				// EachLike pins the element shape while letting the provider
-				// return any number of slots — the consumer genuinely does
-				// not care how many, only what each one looks like.
+				// return any number of slots, since the consumer genuinely
+				// does not care how many, only what each one looks like.
 				"slots": matchers.EachLike(matchers.Map{
 					"id":        matchers.Like(freeSlotID),
 					"doctor_id": matchers.S(doctorID),
@@ -164,7 +164,7 @@ func TestPactReserveSlot(t *testing.T) {
 
 	err := mockProvider.
 		AddInteraction().
-		Given("slot " + freeSlotID + " of doctor " + doctorID + " is free").
+		Given("slot "+freeSlotID+" of doctor "+doctorID+" is free").
 		UponReceiving("a request to reserve that slot").
 		WithRequest("POST", fmt.Sprintf("/doctors/%s/slots/%s/reserve", doctorID, freeSlotID),
 			func(b *consumer.V2RequestBuilder) {
@@ -204,7 +204,7 @@ func TestPactReserveSlotAlreadyTaken(t *testing.T) {
 
 	err := mockProvider.
 		AddInteraction().
-		Given("slot " + takenSlotID + " of doctor " + doctorID + " is already reserved").
+		Given("slot "+takenSlotID+" of doctor "+doctorID+" is already reserved").
 		UponReceiving("a request to reserve a slot that another patient already took").
 		WithRequest("POST", fmt.Sprintf("/doctors/%s/slots/%s/reserve", doctorID, takenSlotID),
 			func(b *consumer.V2RequestBuilder) {
@@ -232,7 +232,7 @@ func TestPactReleaseSlot(t *testing.T) {
 
 	err := mockProvider.
 		AddInteraction().
-		Given("slot " + takenSlotID + " of doctor " + doctorID + " is already reserved").
+		Given("slot "+takenSlotID+" of doctor "+doctorID+" is already reserved").
 		UponReceiving("a request to release that slot after a cancellation").
 		WithRequest("POST", fmt.Sprintf("/doctors/%s/slots/%s/release", doctorID, takenSlotID),
 			func(b *consumer.V2RequestBuilder) {

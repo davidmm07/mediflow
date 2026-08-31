@@ -66,8 +66,8 @@ func New(baseURL string) *Client {
 
 // GetDoctor fetches a practitioner profile. The caller's bearer token is
 // forwarded so doctor-service applies the same authorization it would for a
-// direct call — MediFlow never uses an all-powerful internal service token
-// for user-initiated actions.
+// direct call. MediFlow never uses an all-powerful internal service token for
+// user-initiated actions.
 func (c *Client) GetDoctor(ctx context.Context, bearerToken, doctorID string) (Doctor, error) {
 	req, err := c.newRequest(ctx, http.MethodGet,
 		fmt.Sprintf("/doctors/%s", doctorID), bearerToken, nil)

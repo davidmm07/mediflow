@@ -100,9 +100,9 @@ func (m *Mongo) ListDoctors(ctx context.Context, specialty string) ([]domain.Doc
 // an existing one for the same doctor.
 func (m *Mongo) CreateSlot(ctx context.Context, s domain.Slot) error {
 	overlapping := bson.M{
-		"doctor_id":  s.DoctorID,
-		"starts_at":  bson.M{"$lt": s.EndsAt},
-		"ends_at":    bson.M{"$gt": s.StartsAt},
+		"doctor_id": s.DoctorID,
+		"starts_at": bson.M{"$lt": s.EndsAt},
+		"ends_at":   bson.M{"$gt": s.StartsAt},
 	}
 
 	count, err := m.slots.CountDocuments(ctx, overlapping)
@@ -159,7 +159,7 @@ func (m *Mongo) GetSlot(ctx context.Context, slotID string) (domain.Slot, error)
 }
 
 // ReserveSlot atomically flips a free slot to reserved. The filter includes
-// reserved:false so two concurrent bookings can't both win — the loser gets
+// reserved:false so two concurrent bookings can't both win. The loser gets
 // ErrSlotTaken instead of silently overwriting the winner.
 func (m *Mongo) ReserveSlot(ctx context.Context, slotID, appointmentID string) (domain.Slot, error) {
 	filter := bson.M{"_id": slotID, "reserved": false}

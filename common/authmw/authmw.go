@@ -44,8 +44,8 @@ func (c Claims) HasRole(role string) bool {
 // Verifier validates access tokens against a Keycloak realm's JWKS endpoint,
 // caching the key set and refreshing it in the background.
 type Verifier struct {
-	issuer string
-	cache  *jwk.Cache
+	issuer  string
+	cache   *jwk.Cache
 	jwksURL string
 }
 

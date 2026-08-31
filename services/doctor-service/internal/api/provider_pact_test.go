@@ -11,8 +11,8 @@
 //     what this contract is about (the pact still asserts that an
 //     Authorization header is *sent*).
 //
-// Everything else — routing, status codes, JSON field names, the 409 on a
-// contended slot — is the production code path.
+// Everything else is the production code path: routing, status codes, JSON
+// field names, and the 409 on a contended slot.
 package api_test
 
 import (

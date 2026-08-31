@@ -1,7 +1,7 @@
 // Command notification-service is MediFlow's pure event consumer: it holds no
 // synchronous dependency on any other service and reacts only to what lands
 // on Kafka. That isolation is what makes message-based contract testing the
-// right tool for it — there is no HTTP call to pin down, only the shape of
+// right tool for it: there is no HTTP call to pin down, only the shape of
 // the events it consumes.
 package main
 

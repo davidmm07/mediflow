@@ -223,6 +223,7 @@ minutes while Keycloak imports the realm.
 | Endpoint | URL | Credentials |
 |---|---|---|
 | API gateway | http://localhost:8080 | none |
+| Swagger UI | http://localhost:8088 | Authorize, then sign in |
 | Keycloak admin | http://localhost:8081 | `admin` / `admin` |
 | Pact Broker | http://localhost:9292 | `pact` / `pact` |
 
@@ -261,6 +262,29 @@ every platform. It is also safe to re-run against the same stack: the doctor
 profile is reused when it already exists, and the slot walks forward in
 30-minute steps until it finds a window that does not overlap one an earlier
 run left behind.
+
+### API documentation
+
+[`docs/openapi.yaml`](docs/openapi.yaml) describes all 20 operations. `make up`
+serves it through Swagger UI at **http://localhost:8088**, and because the spec
+declares Keycloak's password flow, the *Authorize* button there issues a real
+token against the running realm instead of asking you to paste one.
+
+### Postman
+
+[`docs/mediflow.postman_collection.json`](docs/mediflow.postman_collection.json)
+covers the same surface in the order that walks the whole flow. Import it and
+run the folders top to bottom, or point the Collection Runner at the lot: each
+request stores what the next one needs, so no ids are copied by hand, and the
+tokens are fetched by the collection itself.
+
+Every request carries assertions, including the negative case where a patient
+is refused another patient's record, so the runner doubles as an end-to-end
+check. To run it headless:
+
+```bash
+make api-test
+```
 
 ### Talking to it by hand
 
@@ -336,6 +360,7 @@ mediflow/
 │   ├── Dockerfile              one multi-stage build, SERVICE arg selects module
 │   └── keycloak/               realm export: roles, clients, seeded users
 ├── tools/smoke/                end-to-end test, stdlib-only Go binary
+├── docs/                       OpenAPI spec and Postman collection
 ├── docker-compose.yml
 └── Makefile
 ```

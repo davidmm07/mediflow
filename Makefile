@@ -123,3 +123,11 @@ logs: ## Tail the application services' logs
 .PHONY: smoke
 smoke: ## Run the end-to-end smoke test against a running stack
 	cd tools/smoke && go run .
+
+# Runs the same collection a human would import into Postman, so the two cannot
+# drift: if this passes, what is documented is what the API does.
+.PHONY: api-test
+api-test: ## Run the Postman collection headlessly (needs Docker)
+	docker run --rm --network host -v "$(CURDIR)/docs:/etc/newman:ro" \
+	  postman/newman:alpine run /etc/newman/mediflow.postman_collection.json \
+	  --reporters cli --color off

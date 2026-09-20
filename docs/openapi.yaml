@@ -1,0 +1,783 @@
+openapi: 3.0.3
+
+info:
+  title: MediFlow API
+  version: "1.0.0"
+  description: |
+    Public surface of the MediFlow telemedicine platform. Every path below is
+    served by the gateway on one port; behind it the requests fan out to five
+    independent services, each with its own database.
+
+    **Authentication.** Everything except `POST /auth/register` and `/health`
+    needs a Keycloak-issued JWT. The gateway validates it at the edge and
+    forwards it, and the service behind validates it again against the same
+    JWKS, so a service reached directly is still protected.
+
+    **Roles** live in the token's `realm_access.roles`: `patient`, `doctor`
+    and `admin`. Where a role is required it is stated on the operation.
+
+    **Reading someone else's appointment returns 404, not 403.** A 403 would
+    confirm the appointment exists, which is itself a leak.
+  license:
+    name: MIT
+    url: https://github.com/davidmm07/mediflow/blob/main/LICENSE
+
+servers:
+  - url: http://localhost:8080
+    description: Local stack started with `make up`
+
+tags:
+  - name: auth
+    description: Self-registration and token introspection
+  - name: doctors
+    description: Practitioner directory and availability
+  - name: patients
+    description: Patient profiles
+  - name: appointments
+    description: Booking and cancellation
+  - name: notifications
+    description: Inbox fed by Kafka events
+  - name: system
+    description: Health probes
+
+# Either scheme is accepted, and both describe the same bearer token: let this
+# page fetch one for you, or paste one you already have.
+security:
+  - keycloak: []
+  - bearerAuth: []
+
+paths:
+  /health:
+    get:
+      tags: [system]
+      operationId: healthCheck
+      summary: Liveness probe
+      description: Served by every service on its own port, and by the gateway.
+      security: []
+      responses:
+        "200":
+          description: The process is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: registerUser
+      summary: Register a new user
+      description: |
+        The only public write in the system, because it is how a patient
+        obtains their first credential. auth-service creates the identity in
+        Keycloak and announces `auth.user.registered` on Kafka;
+        patient-service provisions the profile from that event.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Identity created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409":
+          description: The username or email is already taken
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Keycloak is unreachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /auth/me:
+    get:
+      tags: [auth]
+      operationId: describeToken
+      summary: Describe the caller's token
+      description: Returns the claims this service extracted, useful for checking which roles a token actually carries.
+      responses:
+        "200":
+          description: Decoded claims
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /doctors:
+    get:
+      tags: [doctors]
+      operationId: listDoctors
+      summary: List practitioners
+      parameters:
+        - name: specialty
+          in: query
+          description: Exact match; omit to list everyone.
+          schema: { type: string, example: cardiology }
+      responses:
+        "200":
+          description: Matching practitioners
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  doctors:
+                    type: array
+                    items: { $ref: "#/components/schemas/Doctor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [doctors]
+      operationId: createDoctor
+      summary: Publish a practitioner profile
+      description: |
+        One profile per Keycloak user. A second attempt by the same user is a
+        409, which is what makes re-running the smoke test safe.
+      x-required-roles: [doctor, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDoctorRequest"
+      responses:
+        "201":
+          description: Profile created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Doctor" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: This user already has a profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /doctors/{doctorID}:
+    parameters:
+      - $ref: "#/components/parameters/DoctorID"
+    get:
+      tags: [doctors]
+      operationId: getDoctor
+      summary: Fetch one practitioner
+      responses:
+        "200":
+          description: The practitioner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Doctor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /doctors/{doctorID}/slots:
+    parameters:
+      - $ref: "#/components/parameters/DoctorID"
+    get:
+      tags: [doctors]
+      operationId: listSlots
+      summary: List availability
+      parameters:
+        - name: available
+          in: query
+          description: Set to `true` to hide slots that are already reserved.
+          schema: { type: string, enum: ["true", "false"], example: "true" }
+        - name: from
+          in: query
+          description: RFC 3339 lower bound on the slot start.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: RFC 3339 upper bound on the slot start.
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Availability for this practitioner
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SlotListResponse" }
+        "400":
+          description: "`from` or `to` is not RFC 3339"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [doctors]
+      operationId: createSlot
+      summary: Open an availability window
+      description: Windows may not overlap an existing one for the same practitioner.
+      x-required-roles: [doctor, admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSlotRequest" }
+      responses:
+        "201":
+          description: Window opened
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Slot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: The window overlaps one that already exists
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /doctors/{doctorID}/slots/{slotID}/reserve:
+    parameters:
+      - $ref: "#/components/parameters/DoctorID"
+      - $ref: "#/components/parameters/SlotID"
+    post:
+      tags: [doctors]
+      operationId: reserveSlot
+      summary: Reserve a slot
+      description: |
+        Called by appointment-service during booking, forwarding the patient's
+        own token rather than a service account, so doctor-service applies the
+        same authorization it would for a direct call.
+
+        The reservation is atomic in the database: the update filter requires
+        `reserved:false`, so two concurrent bookings cannot both win and the
+        loser gets a 409. This interaction is pinned by a Pact contract.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReserveSlotRequest" }
+      responses:
+        "200":
+          description: The slot, now reserved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Slot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Another booking took the slot first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /doctors/{doctorID}/slots/{slotID}/release:
+    parameters:
+      - $ref: "#/components/parameters/DoctorID"
+      - $ref: "#/components/parameters/SlotID"
+    post:
+      tags: [doctors]
+      operationId: releaseSlot
+      summary: Release a slot
+      description: |
+        The compensating action. appointment-service calls it when a booking
+        fails after the reservation succeeded, and after a cancellation.
+      responses:
+        "204":
+          description: The slot is back on offer
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /patients/me:
+    get:
+      tags: [patients]
+      operationId: getMyProfile
+      summary: Read your own profile
+      description: |
+        Patients address `/patients/me`, never `/patients/{id}`. Identity
+        comes from the token, so there is no id to guess.
+      responses:
+        "200":
+          description: Your profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Patient" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [patients]
+      operationId: updateMyProfile
+      summary: Update your own profile
+      description: |
+        Upserts, so a patient who registers and opens the app before the
+        Kafka consumer has caught up is not blocked. Answers 201 when this
+        created the record and 200 when it updated one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateProfileRequest" }
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Patient" }
+        "201":
+          description: Profile created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Patient" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /patients/{userID}:
+    parameters:
+      - name: userID
+        in: path
+        required: true
+        description: The patient's Keycloak subject, not the profile id.
+        schema: { type: string, format: uuid }
+    get:
+      tags: [patients]
+      operationId: getPatientRecord
+      summary: Read a patient's record
+      description: For clinicians. Patients have no route that takes an id.
+      x-required-roles: [doctor, admin]
+      responses:
+        "200":
+          description: The record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Patient" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /appointments:
+    post:
+      tags: [appointments]
+      operationId: bookAppointment
+      summary: Book an appointment
+      description: |
+        The one operation that spans an HTTP call and two databases. It
+        reserves the slot in doctor-service before writing locally, because
+        the reservation is the contended resource, and releases it again if
+        the local write fails. On success it publishes `appointments.created`,
+        which notification-service turns into a message.
+      x-required-roles: [patient]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookRequest" }
+      responses:
+        "201":
+          description: Appointment confirmed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Appointment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: The practitioner or the slot does not exist
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Another patient took the slot first
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /appointments/me:
+    get:
+      tags: [appointments]
+      operationId: listMyAppointments
+      summary: List your own appointments
+      responses:
+        "200":
+          description: Your appointments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appointments:
+                    type: array
+                    items: { $ref: "#/components/schemas/Appointment" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /appointments/{appointmentID}:
+    parameters:
+      - $ref: "#/components/parameters/AppointmentID"
+    get:
+      tags: [appointments]
+      operationId: getAppointment
+      summary: Fetch one appointment
+      description: |
+        A caller who is neither the patient nor the practitioner gets **404,
+        not 403**, because a 403 would confirm the appointment exists.
+      responses:
+        "200":
+          description: The appointment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Appointment" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: No such appointment, or not yours
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /appointments/{appointmentID}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/AppointmentID"
+    post:
+      tags: [appointments]
+      operationId: cancelAppointment
+      summary: Cancel an appointment
+      description: |
+        Open to the patient who booked it and to any `doctor` or `admin`. The
+        local write happens before the slot is released, the opposite order to
+        booking: a failed release costs a recoverable slot, while a failed
+        local write would leave the patient believing a live appointment was
+        cancelled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelRequest" }
+      responses:
+        "200":
+          description: The cancelled appointment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Appointment" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: No such appointment, or not yours
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: The appointment is not in a cancellable state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /appointments/doctor/{doctorID}:
+    parameters:
+      - $ref: "#/components/parameters/DoctorID"
+    get:
+      tags: [appointments]
+      operationId: listDoctorAppointments
+      summary: List a practitioner's appointments
+      x-required-roles: [doctor, admin]
+      responses:
+        "200":
+          description: The practitioner's appointments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  appointments:
+                    type: array
+                    items: { $ref: "#/components/schemas/Appointment" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /notifications/me:
+    get:
+      tags: [notifications]
+      operationId: listMyNotifications
+      summary: Read your inbox
+      description: |
+        Populated only by Kafka consumers, never by a synchronous call. If a
+        message is here, the event was delivered end to end.
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of messages to return.
+          schema: { type: integer, minimum: 1, example: 20 }
+      responses:
+        "200":
+          description: Your messages, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notifications:
+                    type: array
+                    items: { $ref: "#/components/schemas/Notification" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /notifications/{notificationID}/read:
+    parameters:
+      - name: notificationID
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [notifications]
+      operationId: markNotificationRead
+      summary: Mark a message as read
+      responses:
+        "204":
+          description: Marked
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+components:
+  securitySchemes:
+    keycloak:
+      type: oauth2
+      description: |
+        The password grant is enabled on the `mediflow-gateway` client so this
+        page and the smoke test can obtain a token unattended. A browser
+        client should use Authorization Code with PKCE instead.
+      flows:
+        password:
+          tokenUrl: http://localhost:8081/realms/mediflow/protocol/openid-connect/token
+          scopes: {}
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Paste a token obtained from Keycloak directly.
+
+  parameters:
+    DoctorID:
+      name: doctorID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SlotID:
+      name: slotID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AppointmentID:
+      name: appointmentID
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: The body failed validation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing, malformed or expired token
+      content:
+        text/plain:
+          schema: { type: string, example: invalid or expired token }
+    Forbidden:
+      description: The token is valid but lacks the required realm role
+      content:
+        text/plain:
+          schema: { type: string, example: "forbidden: missing required role" }
+    NotFound:
+      description: No such resource
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      description: The uniform error body every service returns.
+      properties:
+        error: { type: string, example: doctor not found }
+
+    RegisterRequest:
+      type: object
+      required: [username, email, password, role]
+      properties:
+        username: { type: string, example: ana.paciente }
+        email: { type: string, format: email, example: ana@mediflow.dev }
+        first_name: { type: string, example: Ana }
+        last_name: { type: string, example: Ramirez }
+        password: { type: string, format: password, minLength: 8 }
+        role:
+          type: string
+          enum: [patient, doctor]
+          description: Self-registration cannot grant `admin`.
+
+    RegisterResponse:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: string }
+        role: { type: string, enum: [patient, doctor] }
+
+    MeResponse:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: string, format: email }
+        roles:
+          type: array
+          items: { type: string, enum: [patient, doctor, admin] }
+
+    CreateDoctorRequest:
+      type: object
+      required: [full_name, specialty, license_number]
+      properties:
+        full_name: { type: string, example: Gregory House }
+        specialty: { type: string, example: cardiology }
+        license_number: { type: string, example: ES-CARD-99120 }
+        bio: { type: string }
+        consultation_fee: { type: number, format: double, example: 75 }
+        languages:
+          type: array
+          items: { type: string }
+          example: [es, en]
+
+    Doctor:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        keycloak_user_id: { type: string, format: uuid }
+        full_name: { type: string }
+        specialty: { type: string }
+        license_number: { type: string }
+        bio: { type: string }
+        consultation_fee: { type: number, format: double }
+        languages:
+          type: array
+          items: { type: string }
+        active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateSlotRequest:
+      type: object
+      required: [starts_at, ends_at]
+      properties:
+        starts_at: { type: string, format: date-time, example: "2026-09-27T09:00:00Z" }
+        ends_at: { type: string, format: date-time, example: "2026-09-27T09:30:00Z" }
+
+    Slot:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        doctor_id: { type: string, format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        reserved: { type: boolean }
+        appointment_id:
+          type: string
+          format: uuid
+          description: Present only while the slot is reserved.
+
+    SlotListResponse:
+      type: object
+      properties:
+        doctor_id: { type: string, format: uuid }
+        slots:
+          type: array
+          items: { $ref: "#/components/schemas/Slot" }
+
+    ReserveSlotRequest:
+      type: object
+      required: [appointment_id]
+      properties:
+        appointment_id: { type: string, format: uuid }
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        full_name: { type: string, example: Ana Ramirez }
+        phone: { type: string, example: "+34600111222" }
+        birth_date: { type: string, example: "1990-04-17" }
+        blood_type: { type: string, example: "O+" }
+        allergies:
+          type: array
+          items: { type: string }
+          example: [penicillin]
+
+    Patient:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        keycloak_user_id: { type: string, format: uuid }
+        full_name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        birth_date: { type: string }
+        blood_type: { type: string }
+        allergies:
+          type: array
+          items: { type: string }
+        onboarded:
+          type: boolean
+          description: False while the record exists only from the registration event.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    BookRequest:
+      type: object
+      required: [doctor_id, slot_id]
+      properties:
+        doctor_id: { type: string, format: uuid }
+        slot_id: { type: string, format: uuid }
+        reason: { type: string, example: chest pain follow-up }
+
+    CancelRequest:
+      type: object
+      properties:
+        reason: { type: string, example: scheduling conflict }
+
+    Appointment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        patient_user_id: { type: string, format: uuid }
+        patient_name: { type: string }
+        doctor_id: { type: string, format: uuid }
+        doctor_name: { type: string }
+        specialty: { type: string }
+        slot_id: { type: string, format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [confirmed, cancelled, completed]
+        reason: { type: string }
+        cancelled_reason: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        kind:
+          type: string
+          enum: [welcome, appointment_confirmed, appointment_cancelled]
+        channel:
+          type: string
+          enum: [in_app, email]
+        title: { type: string }
+        body: { type: string }
+        read: { type: boolean }
+        source_id:
+          type: string
+          description: The id of the aggregate the event came from.
+        created_at: { type: string, format: date-time }

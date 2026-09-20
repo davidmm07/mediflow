@@ -1,0 +1,1225 @@
+{
+  "info": {
+    "name": "MediFlow API",
+    "description": "Every endpoint of the MediFlow telemedicine platform, in the order that walks the whole distributed flow.\n\nRun the folders top to bottom, or use the Collection Runner on the whole thing: each request stores what the next one needs, so no ids have to be copied by hand. Point `gateway` and `keycloak` at a stack started with `make up`.\n\nEvery request carries assertions, so the runner doubles as an end-to-end check of the system.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "gateway",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "keycloak",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "realm",
+      "value": "mediflow",
+      "type": "string"
+    },
+    {
+      "key": "client_id",
+      "value": "mediflow-gateway",
+      "type": "string"
+    },
+    {
+      "key": "doctor_user",
+      "value": "dr.house",
+      "type": "string"
+    },
+    {
+      "key": "doctor_pass",
+      "value": "doctor123",
+      "type": "string"
+    },
+    {
+      "key": "patient_user",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "patient_pass",
+      "value": "postman-password-123",
+      "type": "string"
+    },
+    {
+      "key": "patient_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "doctor_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "patient_user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "doctor_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "slot_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "slot_start",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "slot_end",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notification_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health",
+      "item": [
+        {
+          "name": "Gateway health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/health",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Unauthenticated on every service. Used by compose health checks.",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('reports ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "description": "Start here. Register a patient, then collect a token for each role.",
+      "item": [
+        {
+          "name": "Register a patient",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/auth/register",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            },
+            "description": "The only public write in the system. A fresh username is generated before each run so the collection can be run repeatedly.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{patient_user}}\",\n  \"email\": \"{{patient_user}}@mediflow.dev\",\n  \"first_name\": \"Postman\",\n  \"last_name\": \"Tester\",\n  \"password\": \"{{patient_pass}}\",\n  \"role\": \"patient\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A new username per run keeps this re-runnable.",
+                  "pm.collectionVariables.set('patient_user', 'postman.patient.' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('patient_user_id', body.user_id);",
+                  "pm.test('returns the new subject', () => pm.expect(body.user_id).to.be.a('string'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get patient token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{patient_user}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{patient_pass}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloak}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm}}",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "description": "Password grant, enabled on this realm so the collection and the smoke test can run unattended. A browser client would use Authorization Code with PKCE."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('token issued', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('patient_token', body.access_token);",
+                  "const claims = JSON.parse(atob(body.access_token.split('.')[1]));",
+                  "console.log('roles:', claims.realm_access.roles.join(', '));",
+                  "pm.test('iss matches what the services expect', () =>",
+                  "  pm.expect(claims.iss).to.include('/realms/'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get doctor token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}"
+                },
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "username",
+                  "value": "{{doctor_user}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{doctor_pass}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak}}/realms/{{realm}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloak}}"
+              ],
+              "path": [
+                "realms",
+                "{{realm}}",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            },
+            "description": "Seeded practitioner dr.house, who carries the `doctor` realm role."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('token issued', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('doctor_token', body.access_token);",
+                  "const claims = JSON.parse(atob(body.access_token.split('.')[1]));",
+                  "console.log('roles:', claims.realm_access.roles.join(', '));",
+                  "pm.test('iss matches what the services expect', () =>",
+                  "  pm.expect(claims.iss).to.include('/realms/'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Who am I",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/auth/me",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Shows the claims the services extracted, handy for checking which roles a token really carries.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('carries the patient role', () =>",
+                  "  pm.expect(pm.response.json().roles).to.include('patient'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Doctors",
+      "description": "Directory and availability. doctor-service owns the slots.",
+      "item": [
+        {
+          "name": "Create a doctor profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/doctors",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors"
+              ]
+            },
+            "description": "One profile per Keycloak user, so a second run answers 409. The test below accepts both and reuses the existing profile.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctor_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Gregory House\",\n  \"specialty\": \"cardiology\",\n  \"license_number\": \"ES-CARD-99120\",\n  \"bio\": \"Diagnostic medicine\",\n  \"consultation_fee\": 75,\n  \"languages\": [\n    \"es\",\n    \"en\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created or already present', () =>",
+                  "  pm.expect(pm.response.code).to.be.oneOf([201, 409]));",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('doctor_id', pm.response.json().id);",
+                  "} else {",
+                  "  // Re-run against a stack that already has the profile: look it up.",
+                  "  pm.sendRequest({",
+                  "    url: pm.collectionVariables.get('gateway') + '/doctors?specialty=cardiology',",
+                  "    method: 'GET',",
+                  "    header: { Authorization: 'Bearer ' + pm.collectionVariables.get('doctor_token') }",
+                  "  }, (err, res) => {",
+                  "    if (!err && res.code === 200) {",
+                  "      pm.collectionVariables.set('doctor_id', res.json().doctors[0].id);",
+                  "    }",
+                  "  });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List doctors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/doctors?specialty=cardiology",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors"
+              ],
+              "query": [
+                {
+                  "key": "specialty",
+                  "value": "cardiology"
+                }
+              ]
+            },
+            "description": "Any authenticated caller may browse the directory.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () =>",
+                  "  pm.expect(pm.response.json().doctors).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one doctor",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/doctors/{{doctor_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors",
+                "{{doctor_id}}"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('is the one we asked for', () =>",
+                  "  pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('doctor_id')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Open an availability slot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/doctors/{{doctor_id}}/slots",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors",
+                "{{doctor_id}}",
+                "slots"
+              ]
+            },
+            "description": "Windows may not overlap for the same practitioner, so a random 10-minute window a week out is picked before each run. A 409 just means that window was taken: run it again.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctor_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"starts_at\": \"{{slot_start}}\",\n  \"ends_at\": \"{{slot_end}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A random 10-minute window a week out, so repeated runs rarely collide.",
+                  "const start = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);",
+                  "const idx = Math.floor(Math.random() * 144);",
+                  "start.setUTCHours(0, idx * 10, 0, 0);",
+                  "const end = new Date(start.getTime() + 10 * 60 * 1000);",
+                  "pm.collectionVariables.set('slot_start', start.toISOString().replace('.000', ''));",
+                  "pm.collectionVariables.set('slot_end', end.toISOString().replace('.000', ''));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('slot_id', pm.response.json().id);",
+                  "pm.test('starts free', () =>",
+                  "  pm.expect(pm.response.json().reserved).to.be.false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List available slots",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/doctors/{{doctor_id}}/slots?available=true",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors",
+                "{{doctor_id}}",
+                "slots"
+              ],
+              "query": [
+                {
+                  "key": "available",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "Drop `available=true` to see reserved windows as well.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('our slot is on offer', () => {",
+                  "  const ids = pm.response.json().slots.map(s => s.id);",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('slot_id'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Appointments",
+      "description": "The booking saga: an HTTP call to doctor-service plus two databases.",
+      "item": [
+        {
+          "name": "Book an appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/appointments",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "appointments"
+              ]
+            },
+            "description": "Reserves the slot in doctor-service before writing locally, and releases it again if that write fails. Publishes appointments.created on success.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctor_id\": \"{{doctor_id}}\",\n  \"slot_id\": \"{{slot_id}}\",\n  \"reason\": \"chest pain follow-up\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('confirmed', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('appointment_id', body.id);",
+                  "pm.test('status is confirmed', () => pm.expect(body.status).to.eql('confirmed'));",
+                  "pm.test('carries the denormalised doctor name', () =>",
+                  "  pm.expect(body.doctor_name).to.be.a('string').and.not.empty);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Slot is no longer offered",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/doctors/{{doctor_id}}/slots?available=true",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors",
+                "{{doctor_id}}",
+                "slots"
+              ],
+              "query": [
+                {
+                  "key": "available",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "The booked window should have disappeared from availability.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('slot withdrawn', () => {",
+                  "  const ids = pm.response.json().slots.map(s => s.id);",
+                  "  pm.expect(ids).to.not.include(pm.collectionVariables.get('slot_id'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List my appointments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/appointments/me",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "appointments",
+                "me"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('includes the booking', () => {",
+                  "  const ids = pm.response.json().appointments.map(a => a.id);",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('appointment_id'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get one appointment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/appointments/{{appointment_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}"
+              ]
+            },
+            "description": "A caller who is neither the patient nor the practitioner gets 404, not 403: a 403 would confirm it exists.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel the appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/appointments/{{appointment_id}}/cancel",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointment_id}}",
+                "cancel"
+              ]
+            },
+            "description": "The local write happens before the slot is released, the opposite order to booking: a failed release costs a recoverable slot, a failed local write would leave a live appointment the patient believes is cancelled.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"scheduling conflict\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('status is cancelled', () =>",
+                  "  pm.expect(pm.response.json().status).to.eql('cancelled'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Slot is released again",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/doctors/{{doctor_id}}/slots?available=true",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors",
+                "{{doctor_id}}",
+                "slots"
+              ],
+              "query": [
+                {
+                  "key": "available",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "The compensating action put the window back on offer.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('slot back on offer', () => {",
+                  "  const ids = pm.response.json().slots.map(s => s.id);",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('slot_id'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Notifications",
+      "description": "Filled only by Kafka consumers. If a message is here, the event was delivered.",
+      "item": [
+        {
+          "name": "My inbox",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/notifications/me?limit=20",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "notifications",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Nothing in the booking response tells you the event was delivered, so this is the only check that proves the asynchronous half works. Delivery is not instant: if the list is short, send it again.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().notifications || [];",
+                  "if (items.length) pm.collectionVariables.set('notification_id', items[0].id);",
+                  "",
+                  "const booked = pm.collectionVariables.get('appointment_id');",
+                  "const match = items.find(n => n.source_id === booked);",
+                  "pm.test('an event for our appointment arrived', () => {",
+                  "  pm.expect(match, 'no notification yet; Kafka delivery is not instant, re-send this request').to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark one as read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/notifications/{{notification_id}}/read",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notification_id}}",
+                "read"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('no content', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Patients",
+      "description": "Patients address /patients/me and never an id, so there is nothing to guess.",
+      "item": [
+        {
+          "name": "My profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/patients/me",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "patients",
+                "me"
+              ]
+            },
+            "description": "Provisioned by consuming auth.user.registered, not by auth-service writing here. Straight after registering it may not exist yet.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('found or not provisioned yet', () =>",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update my profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{gateway}}/patients/me",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "patients",
+                "me"
+              ]
+            },
+            "description": "Upserts, so a patient who registers and opens the app before the consumer catches up is not blocked.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Postman Tester\",\n  \"phone\": \"+34600111222\",\n  \"birth_date\": \"1990-04-17\",\n  \"blood_type\": \"O+\",\n  \"allergies\": [\n    \"penicillin\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('updated or created', () =>",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 201]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read a patient record (clinician)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/patients/{{patient_user_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "patients",
+                "{{patient_user_id}}"
+              ]
+            },
+            "description": "Requires the doctor or admin realm role. The same call with the patient token is a 403.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctor_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('reachable for a clinician', () =>",
+                  "  pm.expect(pm.response.code).to.be.oneOf([200, 404]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patient cannot read another record",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/patients/{{patient_user_id}}",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "patients",
+                "{{patient_user_id}}"
+              ]
+            },
+            "description": "The negative case, worth keeping: role enforcement should be visible, not assumed.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden for a patient', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

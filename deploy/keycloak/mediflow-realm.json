@@ -49,11 +49,18 @@
       "secret": "auth-service-secret",
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
-      "serviceAccountsEnabled": true,
-      "serviceAccountsRealmRoles": ["admin"]
+      "serviceAccountsEnabled": true
     }
   ],
   "users": [
+    {
+      "username": "service-account-mediflow-auth-service",
+      "enabled": true,
+      "serviceAccountClientId": "mediflow-auth-service",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "view-realm"]
+      }
+    },
     {
       "username": "dr.house",
       "email": "house@mediflow.dev",

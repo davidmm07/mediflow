@@ -1,6 +1,7 @@
 # MediFlow: Telemedicine platform on Go microservices
 
 [![CI](https://github.com/davidmm07/mediflow/actions/workflows/ci.yml/badge.svg)](https://github.com/davidmm07/mediflow/actions/workflows/ci.yml)
+[![Smoke](https://github.com/davidmm07/mediflow/actions/workflows/smoke.yml/badge.svg)](https://github.com/davidmm07/mediflow/actions/workflows/smoke.yml)
 [![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![Contract tests](https://img.shields.io/badge/contract%20tests-Pact-brightgreen)](https://docs.pact.io)
 
@@ -336,6 +337,14 @@ event, and malformed payloads being dropped rather than retried forever.
 3. **publish-pacts**: trunk only, and only after verification is green; the
    broker should never hold a contract that failed.
 4. **images**: build all six container images, catching Dockerfile drift.
+
+None of those four ever starts the system, so
+[`.github/workflows/smoke.yml`](.github/workflows/smoke.yml) is a separate
+workflow that does: it runs `make up` on a runner, books an appointment through
+the real stack, waits for the Kafka notification, and then replays the Postman
+collection so the published documentation cannot quietly drift from the API. It
+is kept apart from `ci.yml` so it carries its own badge and so a slow,
+Docker-heavy run never delays the fast feedback.
 
 `make can-i-deploy` queries the broker for whether a given version is safe to
 release against everything already deployed.

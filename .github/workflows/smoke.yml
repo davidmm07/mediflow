@@ -1,0 +1,81 @@
+name: Smoke
+
+# The unit and contract jobs in ci.yml prove each service behaves and that the
+# pairs agree on their contracts. Neither one ever starts the system. This
+# workflow does: it brings up the real stack and drives a booking through it,
+# including the Kafka round trip that no HTTP response can confirm.
+#
+# It is a separate workflow rather than a job in ci.yml so it carries its own
+# badge, and so a slow, Docker-heavy run cannot hold up the fast feedback.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A superseded run tells you nothing, and this one is expensive.
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.25"
+
+jobs:
+  smoke:
+    name: End-to-end against a live stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Caching is off because the only Go this job runs is tools/smoke, which
+      # depends on nothing outside the standard library and so has no go.sum.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      # Deliberately the same target a developer runs, rather than a
+      # CI-specific startup path that could drift from the documented one.
+      - name: Start the stack
+        run: make up
+
+      - name: Wait for the gateway
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS -m 3 http://localhost:8080/health >/dev/null 2>&1; then
+              echo "gateway healthy after $((i * 5))s"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "gateway never became healthy"
+          exit 1
+
+      # Registration, booking, the Kafka-driven notification, cancellation and
+      # the compensating release.
+      - name: Smoke test
+        run: make smoke
+
+      # Runs the collection this repository asks people to import, so the
+      # published documentation cannot quietly stop matching the API.
+      - name: Postman collection
+        run: make api-test
+
+      - name: Container state on failure
+        if: failure()
+        run: |
+          docker compose ps
+          echo "::group::logs"
+          docker compose logs --no-color --tail=120
+          echo "::endgroup::"
+
+      - name: Tear down
+        if: always()
+        run: make clean

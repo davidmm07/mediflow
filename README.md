@@ -255,6 +255,13 @@ publish a doctor profile and a slot → book → assert the slot disappears →
 is released. The notification step is the one that proves the async path works;
 no HTTP response tells you the event was delivered.
 
+It is a dependency-free Go program ([`tools/smoke`](tools/smoke/main.go)), not a
+shell script, so it needs no `curl`, `jq` or GNU `date` and runs the same on
+every platform. It is also safe to re-run against the same stack: the doctor
+profile is reused when it already exists, and the slot walks forward in
+30-minute steps until it finds a window that does not overlap one an earlier
+run left behind.
+
 ### Talking to it by hand
 
 ```bash
@@ -328,7 +335,7 @@ mediflow/
 ├── deploy/
 │   ├── Dockerfile              one multi-stage build, SERVICE arg selects module
 │   └── keycloak/               realm export: roles, clients, seeded users
-├── scripts/smoke-test.sh
+├── tools/smoke/                end-to-end test, stdlib-only Go binary
 ├── docker-compose.yml
 └── Makefile
 ```

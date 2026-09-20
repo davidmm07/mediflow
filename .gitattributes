@@ -1,6 +1,7 @@
-# Normalise to LF in the repository. Without this, a checkout on Windows
-# gives scripts/smoke-test.sh CRLF endings and it fails to run under
-# Linux/Docker with a confusing "bad interpreter" error.
+# Normalise to LF in the repository. A checkout on Windows would otherwise
+# give CRLF endings to files that are read inside Linux containers, such as
+# the Keycloak realm import, and the failures that causes are reported far
+# from their cause.
 * text=auto eol=lf
 
 *.png binary

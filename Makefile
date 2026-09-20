@@ -1,5 +1,6 @@
 MODULES := common gateway services/auth-service services/doctor-service \
-           services/patient-service services/appointment-service services/notification-service
+           services/patient-service services/appointment-service services/notification-service \
+           tools/smoke
 
 PACT_DIR       := $(CURDIR)/pacts
 PACT_BROKER    ?= http://localhost:9292
@@ -121,4 +122,4 @@ logs: ## Tail the application services' logs
 
 .PHONY: smoke
 smoke: ## Run the end-to-end smoke test against a running stack
-	./scripts/smoke-test.sh
+	cd tools/smoke && go run .

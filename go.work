@@ -8,4 +8,5 @@ use (
 	./services/patient-service
 	./services/appointment-service
 	./services/notification-service
+	./tools/smoke
 )

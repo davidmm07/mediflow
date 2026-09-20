@@ -17,6 +17,7 @@ import (
 	"github.com/davidmm07/mediflow/common/authmw"
 	"github.com/davidmm07/mediflow/common/httpx"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	"github.com/rs/zerolog"
 )
 
@@ -36,10 +37,23 @@ type Route struct {
 
 // Gateway routes public traffic to MediFlow's services.
 type Gateway struct {
-	verifier *authmw.Verifier
-	log      zerolog.Logger
-	proxies  map[string]*httputil.ReverseProxy
-	routes   []Route
+	verifier       *authmw.Verifier
+	log            zerolog.Logger
+	proxies        map[string]*httputil.ReverseProxy
+	routes         []Route
+	allowedOrigins []string
+}
+
+// AllowOrigins enables CORS for the given browser origins. It is off unless
+// configured, because a gateway that echoes any origin is a gateway that lets
+// any page spend a user's token.
+//
+// The order matters more than it looks: CORS has to run before the token check
+// so a preflight, which carries no Authorization header by design, is answered
+// instead of being rejected with a 401 the browser then reports as an opaque
+// network failure.
+func (g *Gateway) AllowOrigins(origins []string) {
+	g.allowedOrigins = origins
 }
 
 // New builds a Gateway for the given routes, failing if any upstream URL is
@@ -75,6 +89,23 @@ func New(verifier *authmw.Verifier, log zerolog.Logger, routes []Route) (*Gatewa
 func (g *Gateway) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(httpx.RequestIDMiddleware)
+
+	// Mounted as router middleware so it sits ahead of every route's token
+	// check and can answer a preflight on its own.
+	if len(g.allowedOrigins) > 0 {
+		r.Use(cors.Handler(cors.Options{
+			AllowedOrigins: g.allowedOrigins,
+			AllowedMethods: []string{
+				http.MethodGet, http.MethodPost, http.MethodPut,
+				http.MethodDelete, http.MethodOptions,
+			},
+			AllowedHeaders:   []string{"Authorization", "Content-Type", "X-Request-Id"},
+			ExposedHeaders:   []string{"X-Request-Id"},
+			AllowCredentials: false,
+			MaxAge:           300,
+		}))
+	}
+
 	r.Get("/health", httpx.HealthHandler)
 
 	for _, route := range g.routes {

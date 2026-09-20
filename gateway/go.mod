@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/davidmm07/mediflow/common v0.0.0
 	github.com/go-chi/chi/v5 v5.0.12
+	github.com/go-chi/cors v1.2.2
 	github.com/rs/zerolog v1.33.0
 )
 

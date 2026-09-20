@@ -73,3 +73,78 @@ func TestRoutingPrecedence(t *testing.T) {
 		})
 	}
 }
+
+// TestPreflightIsNotBlockedByAuth covers the ordering that is easy to get
+// wrong and painful to diagnose. A CORS preflight carries no Authorization
+// header by design, so if the token check runs before the CORS middleware the
+// browser gets a 401 it cannot read and reports only "Failed to fetch".
+//
+// The route here is protected and the verifier is nil: reaching the token
+// check at all would panic, so this fails loudly if the ordering regresses.
+func TestPreflightIsNotBlockedByAuth(t *testing.T) {
+	backend := upstream("doctor-service")
+	defer backend.Close()
+
+	gw, err := proxy.New(nil, zerolog.Nop(), []proxy.Route{
+		{Prefix: "/doctors", Upstream: backend.URL}, // Public is false
+	})
+	if err != nil {
+		t.Fatalf("building the gateway: %v", err)
+	}
+	gw.AllowOrigins([]string{"http://localhost:8088"})
+
+	edge := httptest.NewServer(gw.Handler())
+	defer edge.Close()
+
+	req, err := http.NewRequest(http.MethodOptions, edge.URL+"/doctors", nil)
+	if err != nil {
+		t.Fatalf("building the preflight: %v", err)
+	}
+	req.Header.Set("Origin", "http://localhost:8088")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "authorization")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("sending the preflight: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("preflight answered %d, want 200", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "http://localhost:8088" {
+		t.Errorf("Allow-Origin was %q, want the configured origin", got)
+	}
+}
+
+// TestUnlistedOriginGetsNoCORSHeaders guards the other direction: a gateway
+// that echoes whatever Origin it is handed lets any page spend a user's token.
+func TestUnlistedOriginGetsNoCORSHeaders(t *testing.T) {
+	backend := upstream("doctor-service")
+	defer backend.Close()
+
+	gw, err := proxy.New(nil, zerolog.Nop(), []proxy.Route{
+		{Prefix: "/doctors", Upstream: backend.URL, Public: true},
+	})
+	if err != nil {
+		t.Fatalf("building the gateway: %v", err)
+	}
+	gw.AllowOrigins([]string{"http://localhost:8088"})
+
+	edge := httptest.NewServer(gw.Handler())
+	defer edge.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, edge.URL+"/doctors", nil)
+	req.Header.Set("Origin", "http://evil.example")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("requesting: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("an unlisted origin was allowed: %q", got)
+	}
+}

@@ -5,7 +5,12 @@ x-service-defaults: &service-defaults
   environment: &common-env
     MEDIFLOW_ENV: local
     LOG_LEVEL: debug
-    KEYCLOAK_ISSUER: http://keycloak:8080/realms/mediflow
+    # What the `iss` claim will say, because that is the address the browser
+    # and the host reach Keycloak on.
+    KEYCLOAK_ISSUER: http://localhost:8081/realms/mediflow
+    # Where to actually fetch the signing keys from, which a container cannot
+    # do over localhost:8081 because that is its own loopback.
+    KEYCLOAK_INTERNAL_URL: http://keycloak:8080/realms/mediflow
     KAFKA_BROKERS: redpanda:9092
 
 services:
@@ -17,16 +22,17 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_HEALTH_ENABLED: "true"
-      # Keycloak derives a token's `iss` from the URL it was reached on. The
-      # host asks for tokens via localhost:8081 while services verify against
-      # the compose-internal name, so without a fixed frontend URL every token
-      # minted from the host is rejected by every service. Pinning it makes
-      # `iss` stable no matter which address the request came in on.
-      KC_HOSTNAME_URL: http://keycloak:8080
-      # The admin console is the exception: it has to work in a browser on the
-      # host, which cannot resolve the `keycloak` name.
-      KC_HOSTNAME_ADMIN_URL: http://localhost:8081
+      # Keycloak derives a token's `iss` from the URL it was reached on, so
+      # without a fixed frontend URL the same realm mints tokens two services
+      # disagree about. It is pinned to the published address rather than the
+      # compose-internal one because browsers get here too: the admin console
+      # and Swagger UI run on the host and cannot resolve `keycloak`.
+      #
+      # Services therefore expect this issuer but fetch the signing keys over
+      # the internal name, via KEYCLOAK_INTERNAL_URL below.
+      KC_HOSTNAME_URL: http://localhost:8081
       KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_BACKCHANNEL: "false"
     ports:
       - "8081:8080"
     volumes:
@@ -177,6 +183,10 @@ services:
     environment:
       <<: *common-env
       PORT: "8080"
+      # Swagger UI is served from its own port, so every call it makes to the
+      # gateway is cross-origin. Without this the browser blocks them and
+      # reports only "Failed to fetch", which says nothing about the cause.
+      CORS_ALLOWED_ORIGINS: http://localhost:8088
       AUTH_SERVICE_URL: http://auth-service:8080
       DOCTOR_SERVICE_URL: http://doctor-service:8080
       PATIENT_SERVICE_URL: http://patient-service:8080

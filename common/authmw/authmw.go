@@ -49,11 +49,22 @@ type Verifier struct {
 	jwksURL string
 }
 
-// NewVerifier builds a Verifier for the given Keycloak issuer URL, e.g.
-// "http://keycloak:8080/realms/mediflow". It eagerly registers the JWKS
-// endpoint with a background auto-refreshing cache.
-func NewVerifier(ctx context.Context, issuer string) (*Verifier, error) {
-	jwksURL := strings.TrimRight(issuer, "/") + "/protocol/openid-connect/certs"
+// NewVerifier builds a Verifier that accepts tokens carrying the given issuer
+// and fetches the signing keys from keySource, registering the JWKS endpoint
+// with a background auto-refreshing cache.
+//
+// The two are usually the same URL, and passing "" for keySource says so. They
+// have to differ when the address a token was minted through is not one this
+// process can reach: Keycloak writes the browser-facing URL into `iss`, while
+// a service inside a container network resolves it by an internal name.
+// Deriving the key source from the issuer would force one of the two to be
+// wrong, and both failures are opaque: an unreachable JWKS at boot, or every
+// token rejected for a mismatched issuer.
+func NewVerifier(ctx context.Context, issuer, keySource string) (*Verifier, error) {
+	if keySource == "" {
+		keySource = issuer
+	}
+	jwksURL := strings.TrimRight(keySource, "/") + "/protocol/openid-connect/certs"
 
 	cache := jwk.NewCache(ctx)
 	if err := cache.Register(jwksURL, jwk.WithMinRefreshInterval(10*time.Minute)); err != nil {

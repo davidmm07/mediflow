@@ -24,7 +24,7 @@ func main() {
 	log := logger.New("appointment-service")
 	ctx := context.Background()
 
-	verifier, err := authmw.NewVerifier(ctx, config.MustGet("KEYCLOAK_ISSUER"))
+	verifier, err := authmw.NewVerifier(ctx, config.MustGet("KEYCLOAK_ISSUER"), config.Get("KEYCLOAK_INTERNAL_URL", ""))
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot reach Keycloak JWKS")
 	}

@@ -17,7 +17,7 @@ func main() {
 	log := logger.New("gateway")
 	ctx := context.Background()
 
-	verifier, err := authmw.NewVerifier(ctx, config.MustGet("KEYCLOAK_ISSUER"))
+	verifier, err := authmw.NewVerifier(ctx, config.MustGet("KEYCLOAK_ISSUER"), config.Get("KEYCLOAK_INTERNAL_URL", ""))
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot reach Keycloak JWKS")
 	}
@@ -41,6 +41,14 @@ func main() {
 	gw, err := proxy.New(verifier, log, routes)
 	if err != nil {
 		log.Fatal().Err(err).Msg("invalid upstream configuration")
+	}
+
+	// Empty by default: a browser-facing origin has to be named explicitly.
+	// Locally that is the Swagger UI container, which is served from its own
+	// port and so is cross-origin to every call it makes.
+	if origins := config.GetList("CORS_ALLOWED_ORIGINS", nil); len(origins) > 0 {
+		gw.AllowOrigins(origins)
+		log.Info().Strs("origins", origins).Msg("CORS enabled")
 	}
 
 	if err := server.Run(config.Addr(), gw.Handler(), log, nil); err != nil {

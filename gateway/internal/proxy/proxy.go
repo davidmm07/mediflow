@@ -25,6 +25,13 @@ type Route struct {
 	Prefix   string
 	Upstream string
 	Public   bool
+
+	// Patterns are extra chi patterns that belong to this upstream even
+	// though they sit under another service's prefix. A practitioner's
+	// agenda reads as /doctors/{doctorID}/appointments but is owned by
+	// appointment-service, and chi matches a concrete pattern ahead of the
+	// /doctors/* wildcard, so the nested path reaches the right service.
+	Patterns []string
 }
 
 // Gateway routes public traffic to MediFlow's services.
@@ -78,6 +85,10 @@ func (g *Gateway) Handler() http.Handler {
 		// Handle both the collection root and everything beneath it.
 		r.Handle(route.Prefix, handler)
 		r.Handle(route.Prefix+"/*", handler)
+
+		for _, pattern := range route.Patterns {
+			r.Handle(pattern, handler)
+		}
 	}
 
 	return r

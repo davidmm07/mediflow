@@ -475,13 +475,17 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
-  /appointments/doctor/{doctorID}:
+  /doctors/{doctorID}/appointments:
     parameters:
       - $ref: "#/components/parameters/DoctorID"
     get:
       tags: [appointments]
       operationId: listDoctorAppointments
       summary: List a practitioner's appointments
+      description: |
+        An agenda is a sub-resource of the practitioner, so it is addressed
+        under `/doctors`. appointment-service still owns the data; the gateway
+        forwards this one nested path there rather than to doctor-service.
       x-required-roles: [doctor, admin]
       responses:
         "200":

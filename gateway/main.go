@@ -28,7 +28,13 @@ func main() {
 		{Prefix: "/auth", Upstream: config.MustGet("AUTH_SERVICE_URL"), Public: true},
 		{Prefix: "/doctors", Upstream: config.MustGet("DOCTOR_SERVICE_URL")},
 		{Prefix: "/patients", Upstream: config.MustGet("PATIENT_SERVICE_URL")},
-		{Prefix: "/appointments", Upstream: config.MustGet("APPOINTMENT_SERVICE_URL")},
+		{
+			Prefix:   "/appointments",
+			Upstream: config.MustGet("APPOINTMENT_SERVICE_URL"),
+			// Reads as a sub-resource of the practitioner but is owned here,
+			// so it must not fall through to doctor-service.
+			Patterns: []string{"/doctors/{doctorID}/appointments"},
+		},
 		{Prefix: "/notifications", Upstream: config.MustGet("NOTIFICATION_SERVICE_URL")},
 	}
 

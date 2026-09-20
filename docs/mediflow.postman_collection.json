@@ -836,6 +836,90 @@
           ]
         },
         {
+          "name": "The doctor's agenda",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/doctors/{{doctor_id}}/appointments",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors",
+                "{{doctor_id}}",
+                "appointments"
+              ]
+            },
+            "description": "An agenda is a sub-resource of the practitioner, so it lives under /doctors even though appointment-service owns it. The gateway forwards this one nested path there; a test in gateway/internal/proxy pins that.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{doctor_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ok', () => pm.response.to.have.status(200));",
+                  "pm.test('reached appointment-service, not doctor-service', () => {",
+                  "  const ids = pm.response.json().appointments.map(a => a.id);",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('appointment_id'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patient cannot read an agenda",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway}}/doctors/{{doctor_id}}/appointments",
+              "host": [
+                "{{gateway}}"
+              ],
+              "path": [
+                "doctors",
+                "{{doctor_id}}",
+                "appointments"
+              ]
+            },
+            "description": "Requires the doctor or admin realm role.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{patient_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('forbidden for a patient', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Cancel the appointment",
           "request": {
             "method": "POST",

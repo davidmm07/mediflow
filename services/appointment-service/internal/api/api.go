@@ -57,8 +57,14 @@ func (h *Handler) Routes() http.Handler {
 		private.Get("/appointments/{appointmentID}", h.get)
 		private.Post("/appointments/{appointmentID}/cancel", h.cancel)
 
+		// A practitioner's agenda is a sub-resource of the practitioner, not
+		// of an appointment. Under /appointments it collided in shape with
+		// /appointments/{appointmentID}/cancel, so an appointment whose id
+		// was literally "doctor" would have been ambiguous. This service
+		// still owns the data; the gateway forwards the nested path here
+		// rather than to doctor-service.
 		private.With(authmw.RequireRole("doctor", "admin")).
-			Get("/appointments/doctor/{doctorID}", h.listByDoctor)
+			Get("/doctors/{doctorID}/appointments", h.listByDoctor)
 	})
 
 	return r
